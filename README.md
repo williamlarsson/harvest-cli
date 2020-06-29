@@ -5,21 +5,26 @@ Mac: `brew install jq`
 
 Win: `chocolatey install jq`
 
-### Setup Harvest app
-- [Create account](https://www.getharvest.com/signup)
-- Download and install the harvest app
+### Setup Harvest app and update config.sh
+- Duplicate config.example and rename to config.sh
+- Update config.sh with the following variables
+- [Create harvest account](https://www.getharvest.com/signup)
 - Client: **Isobar** Project: **Coding**
-- Visit profile page, get the user id from the url, and update the ```USER_ID```variable in config
-- Visit projects page -> your project, get the project ID from the url, and update ```PROJECT`` variable
-- Click edit project. Create tasks/clients (eg. Gyldendal, PFA, Studybox, Webapp)
+- Visit profile page, get the user id from the url, and update the ```USER_ID``` variable
+- Visit projects page -> your project, get the project ID from the url, and update the ``PROJECT`` variable
 - Visit [developers page] (https://id.getharvest.com/developers), generate an Access token, and update the ```ACCESS_TOKEN``` & ``` ACCOUNT_ID ``` variable
-- Open terminal and type ``hv newTask internal`` to create the internal task
 
 ### Setup complete
 
 ## Usage
-*Note that any branches with no slash will generate a time entry with an empty message, so if you're on eg. develop, master, use the ``hv <message>`` command*
-###Usage commands:
+>Note that any branches with no slash will generate a time entry with an empty message, so if you're on eg. develop, master, use the `hv <message>` command
+
+To be able to use the `hv internal` command, start with creating the internal task using:
+`hv newTask internal`
+
+
+### Usage commands:
+
         hv                          Toggle timer using git to get task and branchname as message
         hv <message>                Toggle timer using git to get task and with given message
         hv internal <message>       Toggle timer to internal task with given message
@@ -28,7 +33,7 @@ Win: `chocolatey install jq`
         hv getToday                 Get time summary for today
         hv getToday <yyyy-mm-dd>    Get time summary for given
 
-###Utility commands:
+### Utility commands:
 
         hv deleteTask               Delete task using current git directory
         hv deleteTask <name>        Delete task using name
