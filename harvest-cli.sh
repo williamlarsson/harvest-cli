@@ -1,9 +1,3 @@
-DIRECTORY="$(dirname "$0")"
-# source "$DIRECTORY/config.sh"
-USER_ID="2402449"
-ACCOUNT_ID="1003438"
-ACCESS_TOKEN="1745324.pt.tNGe8DDZCUF-0LPJp2wn6Bmpe8qS7p-vb5sCdnY0zyz71wrty6Tyxt3jzzktpodqkwGgftBp6KnjQ9zd7M6ejA"
-PROJECT="18985045"
 alias hv=harvest
 
 function harvest(){
@@ -85,7 +79,7 @@ function harvest(){
             NEW_MESSAGE="$CURRENT_TIME_ENTRY_MESSAGE_FORMATTED\n${@:2}"
         fi
 
-        printf "${magenta}Adding message: ${green}${NEW_MESSAGE} ${magenta}to current running task \n${reset}";
+        printf "${green}Adding message: ${blue}${NEW_MESSAGE} ${green}to current running task \n${reset}";
 
         FORMATTED_MESSAGE="\"notes\":\"$NEW_MESSAGE\""
         UPDATED_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries/${CURRENT_TIME_ENTRY_ID}" \
@@ -226,7 +220,7 @@ function harvest(){
 
                 REPO_TASK_ID=$( echo $ALL_TASK_ASSIGNMENTS | jq '.task_assignments | .[] | select(.task.name == "'"${REPO}"'") | .task.id' )
 
-                printf "${green}Adding new entry to: ${green}$REPO${green} with message: ${blue}${COMMIT_MESSAGE}\n${reset}";
+                printf "${green}Adding new entry to: ${blue}$REPO${green} with message: ${blue}${COMMIT_MESSAGE}\n${reset}";
                 UPDATED_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries" \
                     -H "Authorization: Bearer $ACCESS_TOKEN" \
                     -H "Harvest-Account-Id: $ACCOUNT_ID" \
@@ -237,7 +231,7 @@ function harvest(){
             fi
         else
             printf "${red}You need to be in a git repo, or use the command:\n";
-            printf "${green}harvest internal <message>\n";
+            printf "${green}hv internal <message>\n";
         fi
     fi
 }
