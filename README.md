@@ -13,12 +13,16 @@ Win: `chocolatey install jq`
 - Client: **Isobar** Project: **Coding**
 - Visit profile page, get the user id from the url, and update the ```USER_ID``` variable
 - Visit projects page -> your project, get the project ID from the url, and update the ``PROJECT`` variable
-- Visit [developers page] (https://id.getharvest.com/developers), generate an Access token, and update the ```ACCESS_TOKEN``` & ``` ACCOUNT_ID ``` variable
+- Visit [developers page] (https://id.getharvest.com/developers), generate an Access token, and update the ```ACCESS_TOKEN``` & ``` ACCOUNT_ID ``` variables
+- Finally, add these two lines to your .zshrc, .bash_profile or .bashrc file, and open a new terminal window:
+
+        source /path/to/harvest-cli/config.sh
+        source /path/to/harvest-cli/harvest-cli.sh
 
 ### Setup complete
 
 ## Usage
->Note that any branches with no slash will generate a time entry with an empty message, so if you're on eg. develop, master, use the `hv <message>` command
+>Note: that any branches with no slash will generate a time entry with an empty message, so if you're on eg. develop, master, use the `hv <message>` command
 
 To be able to use the `hv internal` command, start with creating the internal task using:
 `hv newTask internal`
@@ -28,11 +32,11 @@ To be able to use the `hv internal` command, start with creating the internal ta
 
         hv                          Toggle timer using git to get task and branchname as message
         hv <message>                Toggle timer using git to get task and with given message
-        hv internal <message>       Toggle timer to internal task with given message
+        hv internal <name>          Toggle timer to internal task with given name
         hv stop                     Stops the current timer
         hv note <message>           Add message to current running task
         hv getToday                 Get time summary for today
-        hv getToday <yyyy-mm-dd>    Get time summary for given
+        hv getToday <yyyy-mm-dd>    Get time summary for given date
 
 ### Utility commands:
 
