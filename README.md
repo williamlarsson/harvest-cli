@@ -1,4 +1,5 @@
 # Harvest Command Line Interface
+*"Work first, harvest after" - Ada Lungu, developer and philanthropist*
 
 ### Install jq (json parser for bash)
 Mac: `brew install jq`
