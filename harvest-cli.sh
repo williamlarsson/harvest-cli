@@ -113,6 +113,7 @@ function harvest(){
         echo "$TODAY_STATS";
 
     elif [ "$1" = "internal" ]; then
+        REPO="Internal"
         COMMIT_MESSAGE="${@:2}"
 
         TODAY=$(date +'%Y-%m-%d')
@@ -120,16 +121,20 @@ function harvest(){
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Harvest-Account-Id: $ACCOUNT_ID" )
 
-        TIME_ENTRY_ID=$( echo $TODAYS_ENTRIES | jq '.time_entries | .[] | select(.notes == "'"${COMMIT_MESSAGE}"'") | .id' )
+        MATCHED_TIME_ENTRY_ID=$( echo $TODAYS_ENTRIES | jq '.time_entries | .[] | select(.notes == "'"${COMMIT_MESSAGE}"'") | select(.task.name == "'"$REPO"'") | .id' )
 
-        if [ "$TIME_ENTRY_ID" = "" ]; then
-            REPO="Internal"
-
-            allTaskAssignments=$(curl -s "https://api.harvestapp.com/v2/task_assignments?is_active=true" \
+        if [ $MATCHED_TIME_ENTRY_ID ]; then
+                printf "${green}Continuing time entry with task: ${blue}$REPO${green} and message: ${blue}${COMMIT_MESSAGE}\n${reset}";
+                RESTARTED_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries/${MATCHED_TIME_ENTRY_ID}/restart" \
+                    -H "Authorization: Bearer $ACCESS_TOKEN" \
+                    -H "Harvest-Account-Id: $ACCOUNT_ID" \
+                    -X PATCH)
+        else
+            ALL_TASK_ASSIGNMENTS=$(curl -s "https://api.harvestapp.com/v2/task_assignments?is_active=true" \
                 -H "Authorization: Bearer $ACCESS_TOKEN" \
                 -H "Harvest-Account-Id: $ACCOUNT_ID" )
 
-            REPO_TASK_ID=$( echo $allTaskAssignments | jq '.task_assignments | .[] | select(.task.name == "'"${REPO}"'") | .task.id' )
+            REPO_TASK_ID=$( echo $ALL_TASK_ASSIGNMENTS | jq '.task_assignments | .[] | select(.task.name == "'"${REPO}"'") | .task.id' )
 
             printf "${green}Adding new entry to: ${blue}$REPO${green} with message: ${blue}${COMMIT_MESSAGE}\n${reset}";
             UPDATED_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries" \
@@ -138,12 +143,6 @@ function harvest(){
                 -X POST \
                 -H "Content-Type: application/json" \
                 -d '{"project_id": "'"$PROJECT"'","task_id":"'"$REPO_TASK_ID"'","spent_date":"'"$TODAY"'", "notes":"'"$COMMIT_MESSAGE"'"}')
-        else
-            printf "${green}Continue time entry: ${blue}${COMMIT_MESSAGE}  \n${reset}";
-            RESTARTED_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries/${TIME_ENTRY_ID}/restart" \
-                -H "Authorization: Bearer $ACCESS_TOKEN" \
-                -H "Harvest-Account-Id: $ACCOUNT_ID" \
-                -X PATCH)
         fi
 
     elif [ "$1" = "stop" ]; then
@@ -185,11 +184,9 @@ function harvest(){
                 if [ "$currentBranch" = "" ]; then
                     printf "${red}Couldn't get branchname.\n";
                 else
-                    # if [[ $currentBranch =~ ' cell=([^;]+)' ]]; then
-                    #     cell=$match[1] # -> $cell == 'ABC'
-
                     if [[ $currentBranch =~ '/(.*)' ]]; then
                         task=${match[1]}
+
                         COMMIT_MESSAGE="${task}"
                     else
                         COMMIT_MESSAGE="${*}"
@@ -199,7 +196,6 @@ function harvest(){
                 COMMIT_MESSAGE="${@:1}"
             fi
 
-            REPO=$(basename `git rev-parse --show-toplevel`)
             TODAY=$(date +'%Y-%m-%d')
             TODAYS_ENTRIES=$(curl -s "https://api.harvestapp.com/v2/time_entries?from=$TODAY" \
                 -H "Authorization: Bearer $ACCESS_TOKEN" \
