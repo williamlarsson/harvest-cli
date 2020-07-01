@@ -186,7 +186,10 @@ function harvest(){
                 else
                     if [[ $currentBranch =~ '/(.*)' ]]; then
                         task=${match[1]}
+                        COMMIT_MESSAGE="${task}"
 
+                    elif [[ $currentBranch =~ /(.*) ]]; then
+                        task=${BASH_REMATCH[1]}
                         COMMIT_MESSAGE="${task}"
                     else
                         COMMIT_MESSAGE="${*}"
