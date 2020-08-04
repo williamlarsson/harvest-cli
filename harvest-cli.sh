@@ -1,5 +1,67 @@
 alias hv=harvest
 
+function convertTime() {
+    if [[ $1 =~ "(.)\:(..)" ]]; then
+        MINUTES="$(($match[2] * 1 / 6))"
+        HOURS=${match[1]}
+        FORMATTED_TIME="${HOURS}.${MINUTES}"
+        echo $FORMATTED_TIME
+        return $FORMATT ED_TIME
+    else
+        echo $1
+    fi
+}
+
+function register () {
+    REPO=$1
+    HARVEST_ALL_TIME_ENTRIES=$2
+
+    WORKBOOK_TASK_ID=$3
+
+    WORKBOOK_TASK_DATA=$( curl -s "https://wbapp.magnetix.dk/api/task/${WORKBOOK_TASK_ID}/visualization" \
+        -H "Accept: application/json, text/plain, */*" \
+        -H "Content-Type: application/json" \
+        -H "Cookie: ${COOKIE}" )
+
+    WORKBOOK_TASK_JOBNAME=$( echo $WORKBOOK_TASK_DATA | jq -j '.JobName')
+
+    if [[ $WORKBOOK_TASK_JOBNAME =~ $REPO ]]; then
+
+        ALL_TIME_ENTRIES=$(curl -s "https://api.harvestapp.com/v2/time_entries?from=$DATE&to=$DATE" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Harvest-Account-Id: $ACCOUNT_ID" )
+
+        TODAY_STATS=$( echo $ALL_TIME_ENTRIES | jq '[.time_entries | .[] | select(.task.name == "'"$REPO"'")]' )
+        NUM_OF_ENTRIES=$( echo $TODAY_STATS | jq length)
+        DESCRIPTION=$( echo $TODAY_STATS | tr '\r\n' ' ' | jq -j '.[] | .notes, " ", .hours, "h\n"')
+        HOURS=0
+
+        COUNTER=0
+        while [  $COUNTER -lt $NUM_OF_ENTRIES ]; do
+            CURRENT_HOURS=$( echo $TODAY_STATS | jq  " .[${COUNTER}] | .hours" )
+            let HOURS="$(($HOURS+${CURRENT_HOURS}))"
+
+
+            let COUNTER=COUNTER+1
+        done
+
+        echo "${green}Registering to ${blue}${WORKBOOK_TASK_JOBNAME} "
+        echo "${green}Hours: ${blue}${HOURS}"
+        echo "${green}Description: ${blue}${DESCRIPTION}"
+
+        REGISTER_TIME_REQUEST=$( curl -s "https://wbapp.magnetix.dk/api/personalexpense/timeentry/week" \
+            -H "Accept: application/json, text/plain, */*" \
+            -H "Content-Type: application/json" \
+            -H "Cookie: ${COOKIE}" \
+            -X "POST" \
+            -d '{"ResourceId":'$WORKBOOK_USER_ID',"TaskId":'$WORKBOOK_TASK_ID',"Hours":'$HOURS',"Description":"'"$DESCRIPTION"'","InternalDescription":"'"$DESCRIPTION"'","Date":'$DATE'T00:00:00.000Z}' )
+
+    else
+        # echo "${red}No Match. ${blue}Couldn't find a match between task: ${REPO} and your booking(s) for the given date. "
+        # echo "${blue}Please register manually"
+    fi
+}
+
 function harvest(){
     # install jq before usage > brew install jq
     magenta=`tput setaf 5`
@@ -124,7 +186,7 @@ function harvest(){
         MATCHED_TIME_ENTRY_ID=$( echo $TODAYS_ENTRIES | jq '.time_entries | .[] | select(.notes == "'"${COMMIT_MESSAGE}"'") | select(.task.name == "'"$REPO"'") | .id' )
 
         if [ $MATCHED_TIME_ENTRY_ID ]; then
-                printf "${green}Continuing time entry with task: ${blue}$REPO${green} and message: ${blue}${COMMIT_MESSAGE}\n${reset}";
+                printf "${green}Setting time entry with task: ${blue}$REPO${green} and message: ${blue}${COMMIT_MESSAGE}\n${reset}";
                 RESTARTED_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries/${MATCHED_TIME_ENTRY_ID}/restart" \
                     -H "Authorization: Bearer $ACCESS_TOKEN" \
                     -H "Harvest-Account-Id: $ACCOUNT_ID" \
@@ -157,6 +219,261 @@ function harvest(){
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Harvest-Account-Id: $ACCOUNT_ID" \
             -X PATCH)
+
+    elif [ "$1" = "time" ]; then
+        TIME=$(convertTime $2)
+
+        if [ "$TIME" = "" ]; then
+            echo "${red}You must pass amount of hours in format: ${blue}2:30"
+        fi
+        if git rev-parse --git-dir > /dev/null 2>&1; then
+            REPO=$(basename `git rev-parse --show-toplevel`)
+            currentBranch=$(git rev-parse --symbolic-full-name --abbrev-ref HEAD)
+            if [ "$currentBranch" = "" ]; then
+                printf "${red}Couldn't get branchname.\n";
+                return;
+            else
+                if [[ $currentBranch =~ '/(.*)' ]]; then
+                    task=${match[1]}
+                    COMMIT_MESSAGE="${task}"
+
+                elif [[ $currentBranch =~ /(.*) ]]; then
+                    task=${BASH_REMATCH[1]}
+                    COMMIT_MESSAGE="${task}"
+                else
+                    COMMIT_MESSAGE="${*}"
+                fi
+            fi
+
+            TODAY=$(date +'%Y-%m-%d')
+            TODAYS_ENTRIES=$(curl -s "https://api.harvestapp.com/v2/time_entries?from=$TODAY" \
+                -H "Authorization: Bearer $ACCESS_TOKEN" \
+                -H "Harvest-Account-Id: $ACCOUNT_ID" )
+
+            MATCHED_TIME_ENTRY_ID=$( echo $TODAYS_ENTRIES | jq '.time_entries | .[] | select(.notes == "'"${COMMIT_MESSAGE}"'") | select(.task.name == "'"$REPO"'") | .id' )
+
+            if [ $MATCHED_TIME_ENTRY_ID ]; then
+                printf "${green}Updating time entry with task: ${blue}$REPO${green} to time: ${blue}$2\n${reset}";
+
+                UPDATED_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries/${MATCHED_TIME_ENTRY_ID}" \
+                    -H "Authorization: Bearer $ACCESS_TOKEN" \
+                    -H "Harvest-Account-Id: $ACCOUNT_ID" \
+                    -X PATCH \
+                    -H "Content-Type: application/json" \
+                    -d '{"hours": '$TIME'}')
+            else
+
+               CURRENT_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries?user_id=${USER_ID}&is_running=true" \
+                -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                -H "Harvest-Account-Id: ${ACCOUNT_ID}" )
+
+                CURRENT_TIME_ENTRY_ID=$(echo $CURRENT_TIME_ENTRY | jq '.time_entries | .[] | .id')
+
+                UPDATED_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries/${CURRENT_TIME_ENTRY_ID}" \
+                    -H "Authorization: Bearer $ACCESS_TOKEN" \
+                    -H "Harvest-Account-Id: $ACCOUNT_ID" \
+                    -X PATCH \
+                    -H "Content-Type: application/json" \
+                    -d '{"hours": '$TIME'}')
+
+            fi
+        else
+            CURRENT_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries?user_id=${USER_ID}&is_running=true" \
+                -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                -H "Harvest-Account-Id: ${ACCOUNT_ID}" )
+
+            CURRENT_TIME_ENTRY_ID=$(echo $CURRENT_TIME_ENTRY | jq '.time_entries | .[] | .id')
+
+            UPDATED_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries/${CURRENT_TIME_ENTRY_ID}" \
+                -H "Authorization: Bearer $ACCESS_TOKEN" \
+                -H "Harvest-Account-Id: $ACCOUNT_ID" \
+                -X PATCH \
+                -H "Content-Type: application/json" \
+                -d '{"hours": '$TIME'}')
+        fi
+
+    elif [ "$1" = "round" ]; then
+        if git rev-parse --git-dir > /dev/null 2>&1; then
+            REPO=$(basename `git rev-parse --show-toplevel`)
+            currentBranch=$(git rev-parse --symbolic-full-name --abbrev-ref HEAD)
+            if [ "$currentBranch" = "" ]; then
+                printf "${red}Couldn't get branchname.\n";
+                return;
+            else
+                if [[ $currentBranch =~ '/(.*)' ]]; then
+                    task=${match[1]}
+                    COMMIT_MESSAGE="${task}"
+
+                elif [[ $currentBranch =~ /(.*) ]]; then
+                    task=${BASH_REMATCH[1]}
+                    COMMIT_MESSAGE="${task}"
+                else
+                    COMMIT_MESSAGE="${*}"
+                fi
+            fi
+
+            TODAY=$(date +'%Y-%m-%d')
+            TODAYS_ENTRIES=$(curl -s "https://api.harvestapp.com/v2/time_entries?from=$TODAY" \
+                -H "Authorization: Bearer $ACCESS_TOKEN" \
+                -H "Harvest-Account-Id: $ACCOUNT_ID" )
+
+            MATCHED_TIME_ENTRY=$( echo $TODAYS_ENTRIES | jq '.time_entries | .[] | select(.notes == "'"${COMMIT_MESSAGE}"'") | select(.task.name == "'"$REPO"'")' )
+            MATCHED_TIME_ENTRY_TIME=$(echo $MATCHED_TIME_ENTRY | jq '.hours * '${DECIMAL_DELIMITER}' | round / '${DECIMAL_DELIMITER}' ' )
+            MATCHED_TIME_ENTRY_ID=$(echo $MATCHED_TIME_ENTRY | jq '.id' )
+
+            if [ $MATCHED_TIME_ENTRY_ID ]; then
+                printf "${green}Round time entry with task: ${blue}$REPO${green} and message: ${blue}${COMMIT_MESSAGE}\n${reset}";
+                printf "${green}From: ${blue}$(echo $MATCHED_TIME_ENTRY | jq '.hours' )${green} to: ${blue}${MATCHED_TIME_ENTRY_TIME}\n${reset}";
+
+                UPDATED_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries/${MATCHED_TIME_ENTRY_ID}" \
+                    -H "Authorization: Bearer $ACCESS_TOKEN" \
+                    -H "Harvest-Account-Id: $ACCOUNT_ID" \
+                    -X PATCH \
+                    -H "Content-Type: application/json" \
+                    -d '{"hours": '$MATCHED_TIME_ENTRY_TIME'}')
+            else
+
+               CURRENT_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries?user_id=${USER_ID}&is_running=true" \
+                -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                -H "Harvest-Account-Id: ${ACCOUNT_ID}" )
+
+                CURRENT_TIME_ENTRY_ID=$(echo $CURRENT_TIME_ENTRY | jq '.time_entries | .[] | .id')
+
+                UPDATED_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries/${CURRENT_TIME_ENTRY_ID}" \
+                    -H "Authorization: Bearer $ACCESS_TOKEN" \
+                    -H "Harvest-Account-Id: $ACCOUNT_ID" \
+                    -X PATCH \
+                    -H "Content-Type: application/json" \
+                    -d '{"hours": '$TIME'}')
+
+            fi
+        else
+            CURRENT_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries?user_id=${USER_ID}&is_running=true" \
+                -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                -H "Harvest-Account-Id: ${ACCOUNT_ID}" )
+
+            CURRENT_TIME_ENTRY_ID=$(echo $CURRENT_TIME_ENTRY | jq '.time_entries | .[] | .id')
+
+            UPDATED_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries/${CURRENT_TIME_ENTRY_ID}" \
+                -H "Authorization: Bearer $ACCESS_TOKEN" \
+                -H "Harvest-Account-Id: $ACCOUNT_ID" \
+                -X PATCH \
+                -H "Content-Type: application/json" \
+                -d '{"hours": '$TIME'}')
+        fi
+
+    elif [ "$1" = "register" ] || [ "$1" = "reg" ]; then
+
+        DATE=${2:-$(date +'%Y-%m-%d')}
+
+        #FETCH HARVEST DATA
+        echo "${blue}Fetching data from harvest..."
+        HARVEST_ALL_TIME_ENTRIES=$(curl -s "https://api.harvestapp.com/v2/time_entries?from=$DATE&to=$DATE" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Harvest-Account-Id: $ACCOUNT_ID" )
+
+        HARVEST_TASKS=$( echo $HARVEST_ALL_TIME_ENTRIES | jq '[.time_entries | .[] | .task.name]')
+        HARVEST_TASKS_LENGTH=$( echo $HARVEST_TASKS | jq length )
+
+        #ESTABLISH AUTHENTICATION TO WORKBOOK
+        AUTH_WITHOUT_HEADERS=$(curl -s "https://wbapp.magnetix.dk/api/auth/ldap" \
+            -H "Content-Type: application/json" \
+            -X "POST" \
+            -d '{"UserName":"'"$WORKBOOK_USERNAME"'","Password":"'"$WORKBOOK_PASSWORD"'", "RememberMe": true}')
+
+        WORKBOOK_USER_ID=$(echo $AUTH_WITHOUT_HEADERS | tr '\r\n' ' ' |  jq '.Id' )
+
+        AUTH_WITH_HEADERS=$(curl -i -s "https://wbapp.magnetix.dk/api/auth/ldap" \
+            -H "Content-Type: application/json" \
+            -X "POST" \
+            -d '{"UserName":"'"$WORKBOOK_USERNAME"'","Password":"'"$WORKBOOK_PASSWORD"'", "RememberMe": true}')
+
+
+        if [[ $AUTH_WITH_HEADERS =~ "ss-pid=(.{20})" ]]; then
+            SS_PID=${match[1]}
+        elif [[ $AUTH_WITH_HEADERS =~ ss-pid=(.{20}) ]]; then
+            SS_PID=${BASH_REMATCH[1]}
+        else
+            echo "Couldn't authenticate"
+            return;
+        fi
+
+        if [[ $AUTH_WITH_HEADERS =~ "ss-id=(.{20})" ]]; then
+            SS_ID=${match[1]}
+        elif [[ $AUTH_WITH_HEADERS =~ ss-id=(.{20}) ]]; then
+            SS_ID=${BASH_REMATCH[1]}
+        else
+            echo "Couldn't authenticate"
+            return;
+        fi
+
+        echo "${blue}Establishing authentication to workbook..."
+        COOKIE="X-UAId=; ss-opt=perm; ss-pid=${SS_PID}; ss-id=${SS_ID};"
+
+        FILTER_RESPONSE=$( curl -s "https://wbapp.magnetix.dk/api/schedule/weekly/visualization/data?ResourceIds=${WORKBOOK_USER_ID}&PeriodType=1&Date=${DATE}&Interval=1" \
+            -H "Accept: application/json, text/plain, */*" \
+            -H "Content-Type: application/json" \
+            -H "Cookie: ${COOKIE}" \
+            -X "POST" \
+            -d '{}' )
+
+        FILTER_RESPONSE_DETAILS=$( echo $FILTER_RESPONSE | jq '.[] | .Data | ."0" | .Details ')
+
+        NUM_OF_BOOKINGS=$( echo $FILTER_RESPONSE_DETAILS | jq length)
+
+        BOOKINGS_COUNTER=0
+
+        HARVEST_TASKS_REGISTERED=""
+
+
+        while [  $BOOKINGS_COUNTER -lt $NUM_OF_BOOKINGS ]; do
+
+            CURRENT_TASK_ID=$( echo $FILTER_RESPONSE_DETAILS | jq  " .[${BOOKINGS_COUNTER}] | .TaskId" )
+
+            HARVEST_TASKS_COUNTER=0
+
+            while [  $HARVEST_TASKS_COUNTER -lt $HARVEST_TASKS_LENGTH ]; do
+
+                HARVEST_CURRENT_TASK_NAME=$( echo $HARVEST_TASKS | jq -j ".[${HARVEST_TASKS_COUNTER}]" )
+
+                if [[ $HARVEST_TASKS_REGISTERED != *${HARVEST_CURRENT_TASK_NAME}* ]]; then
+
+                    register $HARVEST_CURRENT_TASK_NAME $HARVEST_ALL_TIME_ENTRIES $CURRENT_TASK_ID
+                    #echo $HARVEST_CURRENT_TASK_NAME $HARVEST_ALL_TIME_ENTRIES $CURRENT_TASK_ID
+                fi
+
+                HARVEST_TASKS_REGISTERED="${HARVEST_TASKS_REGISTERED}${HARVEST_CURRENT_TASK_NAME}"
+                let HARVEST_TASKS_COUNTER=HARVEST_TASKS_COUNTER+1
+
+            done
+
+            HARVEST_TASKS_REGISTERED=""
+
+            let BOOKINGS_COUNTER=BOOKINGS_COUNTER+1
+
+        done
+        return;
+        if [ "$NUM_OF_BOOKINGS" == "1" ]; then
+
+            WORKBOOK_TASK_ID=$( echo $FILTER_RESPONSE_DETAILS | jq '.[] | .TaskId')
+
+            register $REPO $HARVEST_ALL_TIME_ENTRIES $WORKBOOK_TASK_ID
+
+            return;
+        else
+            COUNTER=0
+
+            while [  $COUNTER -lt $NUM_OF_BOOKINGS ]; do
+
+                CURRENT_TASK_ID=$( echo $FILTER_RESPONSE_DETAILS | jq  " .[${COUNTER}] | .TaskId" )
+
+                register $REPO $HARVEST_ALL_TIME_ENTRIES $CURRENT_TASK_ID
+
+                let COUNTER=COUNTER+1
+
+            done
+        fi
+
 
     elif [ "$1" = "help" ]; then
         printf "
@@ -232,5 +549,127 @@ function harvest(){
             printf "${red}You need to be in a git repo, or use the command:\n";
             printf "${green}hv internal <message>\n";
         fi
+    fi
+}
+
+
+function reg () {
+
+    if git rev-parse --git-dir > /dev/null 2>&1; then
+
+        function register () {
+            return;
+            REPO=$1
+
+            WORKBOOK_TASK_ID=$2
+
+            WORKBOOK_TASK_DATA=$( curl -s "https://wbapp.magnetix.dk/api/task/${WORKBOOK_TASK_ID}/visualization" \
+                -H "Accept: application/json, text/plain, */*" \
+                -H "Content-Type: application/json" \
+                -H "Cookie: ${COOKIE}" )
+
+            WORKBOOK_TASK_JOBNAME=$( echo $WORKBOOK_TASK_DATA | jq -j '.JobName')
+
+            if [[ $WORKBOOK_TASK_JOBNAME =~ $REPO ]]; then
+
+                TODAY_STATS=$( echo $ALL_TIME_ENTRIES | jq '[.time_entries | .[] | select(.task.name == "'"$REPO"'")]' )
+                NUM_OF_ENTRIES=$( echo $TODAY_STATS | jq length)
+                DESCRIPTION=$( echo $TODAY_STATS | tr '\r\n' ' ' | jq -j '.[] | .notes, " ", .hours, "h\n"')
+                HOURS=0
+
+                COUNTER=0
+                while [  $COUNTER -lt $NUM_OF_ENTRIES ]; do
+                    CURRENT_HOURS=$( echo $TODAY_STATS | jq  " .[${COUNTER}] | .hours" )
+                    let HOURS="$(($HOURS+${CURRENT_HOURS}))"
+
+
+                    let COUNTER=COUNTER+1
+                done
+
+                echo "${green}Registering to ${blue}${WORKBOOK_TASK_JOBNAME} "
+                echo "${green}Hours: ${blue}${HOURS}"
+                echo "${green}Description: ${blue}${DESCRIPTION}"
+
+                REGISTER_TIME_REQUEST=$( curl -s "https://wbapp.magnetix.dk/api/personalexpense/timeentry/week" \
+                    -H "Accept: application/json, text/plain, */*" \
+                    -H "Content-Type: application/json" \
+                    -H "Cookie: ${COOKIE}" \
+                    -X "POST" \
+                    -d '{"ResourceId":'$WORKBOOK_USER_ID',"TaskId":'$WORKBOOK_TASK_ID',"Hours":'$HOURS',"Description":"'"$DESCRIPTION"'","InternalDescription":"'"$DESCRIPTION"'","Date":'$DATE'T00:00:00.000Z}' )
+
+            else
+                # echo "${red}No Match. ${blue}Couldn't find a match between task: ${REPO} and your booking(s) for the given date. "
+                # echo "${blue}Please register manually"
+            fi
+        }
+
+        REPO=$(basename `git rev-parse --show-toplevel`)
+        if [[ $1 = "Internal" ]]; then
+            REPO="Internal"
+            TIME=$3
+        else
+            HOURS=$1
+            DATE=${2:-$(date +'%Y-%m-%d')}
+
+            #ESTABLISH AUTHENTICATION TO WORKBOOK
+            echo "${blue}Establishing authentication to workbook..."
+
+            AUTH_WITHOUT_HEADERS=$(curl -s "https://wbapp.magnetix.dk/api/auth/ldap" \
+                -H "Content-Type: application/json" \
+                -X "POST" \
+                -d '{"UserName":"'"$WORKBOOK_USERNAME"'","Password":"'"$WORKBOOK_PASSWORD"'", "RememberMe": true}')
+
+            WORKBOOK_USER_ID=$(echo $AUTH_WITHOUT_HEADERS | tr '\r\n' ' ' |  jq '.Id' )
+
+            AUTH_WITH_HEADERS=$(curl -i -s "https://wbapp.magnetix.dk/api/auth/ldap" \
+                -H "Content-Type: application/json" \
+                -X "POST" \
+                -d '{"UserName":"'"$WORKBOOK_USERNAME"'","Password":"'"$WORKBOOK_PASSWORD"'", "RememberMe": true}')
+
+
+            if [[ $AUTH_WITH_HEADERS =~ "ss-pid=(.{20})" ]]; then
+                SS_PID=${match[1]}
+            elif [[ $AUTH_WITH_HEADERS =~ ss-pid=(.{20}) ]]; then
+                SS_PID=${BASH_REMATCH[1]}
+            else
+                echo "Couldn't authenticate"
+                return;
+            fi
+
+            if [[ $AUTH_WITH_HEADERS =~ "ss-id=(.{20})" ]]; then
+                SS_ID=${match[1]}
+            elif [[ $AUTH_WITH_HEADERS =~ ss-id=(.{20}) ]]; then
+                SS_ID=${BASH_REMATCH[1]}
+            else
+                echo "Couldn't authenticate"
+                return;
+            fi
+
+            COOKIE="X-UAId=; ss-opt=perm; ss-pid=${SS_PID}; ss-id=${SS_ID};"
+
+            FILTER_RESPONSE=$( curl -s "https://wbapp.magnetix.dk/api/schedule/weekly/visualization/data?ResourceIds=${WORKBOOK_USER_ID}&PeriodType=1&Date=${DATE}&Interval=1" \
+                -H "Accept: application/json, text/plain, */*" \
+                -H "Content-Type: application/json" \
+                -H "Cookie: ${COOKIE}" \
+                -X "POST" \
+                -d '{}' )
+
+            FILTER_RESPONSE_DETAILS=$( echo $FILTER_RESPONSE | jq '.[] | .Data | ."0" | .Details ')
+
+            NUM_OF_BOOKINGS=$( echo $FILTER_RESPONSE_DETAILS | jq length)
+
+            BOOKINGS_COUNTER=0
+
+            while [  $BOOKINGS_COUNTER -lt $NUM_OF_BOOKINGS ]; do
+
+                CURRENT_TASK_ID=$( echo $FILTER_RESPONSE_DETAILS | jq  " .[${BOOKINGS_COUNTER}] | .TaskId" )
+
+                let BOOKINGS_COUNTER=BOOKINGS_COUNTER+1
+                echo $CURRENT_TASK_ID
+                register $REPO $HARVEST_ALL_TIME_ENTRIES $CURRENT_TASK_ID
+            done
+        fi
+    else
+        printf "${red}You need to be in a git repo "
     fi
 }
