@@ -14,14 +14,13 @@ function convertTime() {
 
 function register () {
     REPO=$1
-    HARVEST_ALL_TIME_ENTRIES=$2
-
-    WORKBOOK_TASK_ID=$3
+    WORKBOOK_TASK_ID=$2
 
     WORKBOOK_TASK_DATA=$( curl -s "https://wbapp.magnetix.dk/api/task/${WORKBOOK_TASK_ID}/visualization" \
         -H "Accept: application/json, text/plain, */*" \
         -H "Content-Type: application/json" \
         -H "Cookie: ${COOKIE}" )
+
 
     WORKBOOK_TASK_JOBNAME=$( echo $WORKBOOK_TASK_DATA | jq -j '.JobName')
     TRIMMED_WORKBOOK_TASK_JOBNAME=$( echo "$WORKBOOK_TASK_JOBNAME" | tr '[:upper:]' '[:lower:]' )
@@ -44,14 +43,15 @@ function register () {
         COUNTER=0
         while [  $COUNTER -lt $NUM_OF_ENTRIES ]; do
             CURRENT_HOURS=$( echo $TODAY_STATS | jq  " .[${COUNTER}] | .hours" )
-            let HOURS="$(($HOURS+${CURRENT_HOURS}))"
+            HOURS=$(echo "$HOURS + $CURRENT_HOURS" | bc )
 
             let COUNTER=COUNTER+1
         done
 
+        echo ""
         echo "${green}Registering to ${blue}${WORKBOOK_TASK_JOBNAME} "
         echo "${green}Hours: ${blue}${HOURS}"
-        echo "${green}Description: ${blue}${DESCRIPTION}\n"
+        echo "${green}Description: ${blue}${DESCRIPTION}"
 
         REGISTER_TIME_REQUEST=$( curl -s "https://wbapp.magnetix.dk/api/personalexpense/timeentry/week" \
             -H "Accept: application/json, text/plain, */*" \
@@ -67,7 +67,6 @@ function register () {
 }
 
 function registerInternal () {
-
     HARVEST_TASK_DATA=$1
 
     WORKBOOK_JOB_ID=$2
@@ -76,11 +75,11 @@ function registerInternal () {
         -H "Authorization: Bearer $ACCESS_TOKEN" \
         -H "Harvest-Account-Id: $ACCOUNT_ID" )
 
-    NOTES=$( echo $HARVEST_TASK_DATA | jq '.notes' )
-    DESCRIPTION=$( echo $HARVEST_TASK_DATA | jq '.notes' )
-    HOURS=$( echo $HARVEST_TASK_DATA | jq '.hours' )
-
-    echo "${green}\nTask: ${blue}Internal"
+    NOTES=$( echo "$HARVEST_TASK_DATA" | tr '\r\n' ' ' | jq '.notes' )
+    DESCRIPTION=$( echo "$HARVEST_TASK_DATA" | jq '.notes' )
+    HOURS=$( echo "$HARVEST_TASK_DATA" | jq '.hours' )
+    echo ""
+    echo "${green}Task: ${blue}Internal"
     echo "${green}Description: ${blue}${DESCRIPTION}"
 
     echo "${green}Please choose which task type you want to register to:${reset}"
@@ -106,8 +105,8 @@ function registerInternal () {
     # DEDUCT 1 TO MATCH ARRAY INDEXING
     USER_WORKBOOK_TASK=$(( USER_WORKBOOK_TASK - 1))
 
-
-    echo "${green}\nRegistering to ${blue}Internal"
+    echo ""
+    echo "${green}Registering to ${blue}Internal"
     echo "${green}Hours: ${blue}${HOURS}"
     echo "${green}Description: ${blue}${DESCRIPTION}"
 
@@ -131,22 +130,6 @@ function registerInternal () {
         -H "Cookie: ${COOKIE}" \
         -X "POST" \
         -d '{"ResourceId":'$WORKBOOK_USER_ID',"Id": '${WORKBOOK_ID}', "ActivityId": 999, "Billable": false, "TaskId":'${WORKBOOK_TASK_ID}',"Hours":'${HOURS}',"Description":'$DESCRIPTION',"InternalDescription":'$DESCRIPTION',"Date":'$DATE'T00:00:00.000Z}' )
-    # REGISTER_TIME_REQUEST=$( curl -s "https://wbapp.magnetix.dk/api/json/reply/TimeEntryUpdateRequest" \
-    #     -H "Accept: application/json, text/plain, */*" \
-    #     -H "Content-Type: application/json" \
-    #     -H "Cookie: ${COOKIE}" \
-    #     -X "POST" \
-    #     -d '{"ResourceId":'$WORKBOOK_USER_ID',"Id": '${WORKBOOK_ID}', "ActivityId": 999, "Billable": 'false',"TaskId":'${WORKBOOK_TASK_ID}',"Hours":3,"Description":"'"$DESCRIPTION"'","InternalDescription":"'"$DESCRIPTION"'","Date":'$DATE'T00:00:00.000Z}' )
-
-    # Request URL: https://workbook.magnetix.dk/api/json/reply/TimeEntryUpdateRequest
-
-    # Id: 6234477, ActivityId: 999, Billable: false, Hours: 1, TaskId: 54721, Description: "asdf↵"}
-    # ActivityId: 999
-    # Billable: false
-    # Description: "asdf↵"
-    # Hours: 1
-    # Id: 6234477
-    # TaskId: 54721
 }
 
 function harvest(){
@@ -513,7 +496,6 @@ function harvest(){
 
         HARVEST_TASKS_REGISTERED=""
 
-
         while [  $BOOKINGS_COUNTER -lt $NUM_OF_BOOKINGS ]; do
 
             HARVEST_TASKS_COUNTER=0
@@ -524,10 +506,9 @@ function harvest(){
 
                 if [[ $HARVEST_TASKS_REGISTERED != *${HARVEST_CURRENT_TASK_NAME}* ]] && [[ "$HARVEST_CURRENT_TASK_NAME" != "Internal" ]]; then
 
-
                     CURRENT_TASK_ID=$( echo $FILTER_RESPONSE_DETAILS | jq  " .[${BOOKINGS_COUNTER}] | .TaskId" )
-                    # echo $HARVEST_CURRENT_TASK_NAME $HARVEST_ALL_TIME_ENTRIES $CURRENT_TASK_ID
-                    register $HARVEST_CURRENT_TASK_NAME $HARVEST_ALL_TIME_ENTRIES $CURRENT_TASK_ID
+
+                    register $HARVEST_CURRENT_TASK_NAME $CURRENT_TASK_ID
                 fi
 
                 HARVEST_TASKS_REGISTERED="${HARVEST_TASKS_REGISTERED}${HARVEST_CURRENT_TASK_NAME}"
@@ -553,7 +534,7 @@ function harvest(){
 
                 HARVEST_CURRENT_TASK=$( echo $HARVEST_TASKS | jq -j ".[${HARVEST_TASKS_COUNTER}]" )
 
-                registerInternal $HARVEST_CURRENT_TASK 1000
+                registerInternal "$HARVEST_CURRENT_TASK" 1000
             fi
 
             let HARVEST_TASKS_COUNTER=HARVEST_TASKS_COUNTER+1
