@@ -1,4 +1,8 @@
+DIR="${0%/*}"
+source "$DIR/wb-cli.sh"
+source "$DIR/config.sh"
 alias hv=harvest
+
 
 function convertTime() {
     if [[ $1 =~ "(.)\:(..)" ]]; then
