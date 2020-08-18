@@ -1,4 +1,4 @@
-function register () {
+function wbRegister () {
 
     WORKBOOK_TASK_BOOKING=$1
 
@@ -6,6 +6,7 @@ function register () {
 
 
     TOTAL_HOURS_BOOKED=$( echo "$TOTAL_HOURS_BOOKED" + $( echo $WORKBOOK_TASK_BOOKING | jq -j '.Hours') | bc )
+
 
     WORKBOOK_TASK_DATA=$( curl -s "https://wbapp.magnetix.dk/api/task/${WORKBOOK_TASK_ID}/visualization" \
         -H "Accept: application/json, text/plain, */*" \
@@ -159,20 +160,19 @@ function wb () {
         FILTER_RESPONSE_DETAILS=$( echo $FILTER_RESPONSE | jq '.[] | .Data | ."0" | .Details ')
 
         NUM_OF_BOOKINGS=$( echo $FILTER_RESPONSE_DETAILS | jq length)
-        echo $FILTER_RESPONSE
 
         BOOKINGS_COUNTER=0
 
         TOTAL_HOURS_BOOKED=0
         TOTAL_HOURS_REGISTERED=0
 
-        echo "${reset}Found ${green}$NUM_OF_BOOKINGS ${reset}bookings for you."
+        echo "${reset}Found ${green}$NUM_OF_BOOKINGS ${reset}booking(s) for you."
 
         while [  $BOOKINGS_COUNTER -lt $NUM_OF_BOOKINGS ]; do
 
             CURRENT_TASK_BOOKING=$( echo $FILTER_RESPONSE_DETAILS | jq  " .[${BOOKINGS_COUNTER}]" )
 
-            register "$CURRENT_TASK_BOOKING"
+            wbRegister "$CURRENT_TASK_BOOKING"
 
             let BOOKINGS_COUNTER=BOOKINGS_COUNTER+1
 
