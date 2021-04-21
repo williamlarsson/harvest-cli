@@ -1,16 +1,11 @@
-DIR="${0%/*}"
-source "$DIR/wb-cli.sh"
-source "$DIR/config.sh"
 alias hv=harvest
-
 
 function convertTime() {
     if [[ $1 =~ "(.)\:(..)" ]]; then
-        MINUTES="$(($match[2] * 1 / 6))"
+        MINUTES=$( jq -n "$match[2] / 6 * 10")
         HOURS=${match[1]}
         FORMATTED_TIME="${HOURS}.${MINUTES}"
         echo $FORMATTED_TIME
-        return $FORMATT ED_TIME
     else
         echo $1
     fi
@@ -20,7 +15,7 @@ function register () {
     REPO=$1
     WORKBOOK_TASK_ID=$2
 
-    WORKBOOK_TASK_DATA=$( curl -s "https://wbapp.magnetix.dk/api/task/${WORKBOOK_TASK_ID}/visualization" \
+    WORKBOOK_TASK_DATA=$( curl -s "https://workbook.magnetix.dk/api/task/${WORKBOOK_TASK_ID}/visualization" \
         -H "Accept: application/json, text/plain, */*" \
         -H "Content-Type: application/json" \
         -H "Cookie: ${COOKIE}" )
@@ -57,7 +52,7 @@ function register () {
         echo "${green}Hours: ${blue}${HOURS}"
         echo "${green}Description: ${blue}${DESCRIPTION}"
 
-        REGISTER_TIME_REQUEST=$( curl -s "https://wbapp.magnetix.dk/api/personalexpense/timeentry/week" \
+        REGISTER_TIME_REQUEST=$( curl -s "https://workbook.magnetix.dk/api/personalexpense/timeentry/week" \
             -H "Accept: application/json, text/plain, */*" \
             -H "Content-Type: application/json" \
             -H "Cookie: ${COOKIE}" \
@@ -89,7 +84,7 @@ function registerInternal () {
     echo "${green}Please choose which task type you want to register to:${reset}"
 
 
-    WORKBOOK_TASK_DATA=$( curl -s "https://wbapp.magnetix.dk/api/json/reply/TasksTimeRegistrationRequest?ResourceId=${WORKBOOK_USER_ID}&JobId=${WORKBOOK_JOB_ID}" \
+    WORKBOOK_TASK_DATA=$( curl -s "https://workbook.magnetix.dk/api/json/reply/TasksTimeRegistrationRequest?ResourceId=${WORKBOOK_USER_ID}&JobId=${WORKBOOK_JOB_ID}" \
         -H "Accept: application/json, text/plain, */*" \
         -H "Content-Type: application/json" \
         -H "Cookie: ${COOKIE}" )
@@ -120,7 +115,7 @@ function registerInternal () {
     WORKBOOK_TASK_NUMBER=$( echo $WORKBOOK_TASK_DATA | jq  " .[${USER_WORKBOOK_TASK}] | .TaskNumber" )
 
 
-    WORKBOOK_WEEKLY_DATA=$( curl -s "https://wbapp.magnetix.dk/api/json/reply/TimeEntryDailyRequest?ResourceId=${WORKBOOK_USER_ID}&Date=${DATE}" \
+    WORKBOOK_WEEKLY_DATA=$( curl -s "https://workbook.magnetix.dk/api/json/reply/TimeEntryDailyRequest?ResourceId=${WORKBOOK_USER_ID}&Date=${DATE}" \
         -H "Accept: application/json, text/plain, */*" \
         -H "Content-Type: application/json" \
         -H "Cookie: ${COOKIE}" )
@@ -128,7 +123,7 @@ function registerInternal () {
     WORKBOOK_ID=$( echo $WORKBOOK_WEEKLY_DATA  | tr '\r\n' ' ' | jq -j '[ .[] | select(.TaskId == '${WORKBOOK_TASK_ID}') ] | [first] | .[] | .Id' )
 
 
-    REGISTER_TIME_REQUEST=$( curl -s "https://wbapp.magnetix.dk/api/json/reply/TimeEntryUpdateRequest" \
+    REGISTER_TIME_REQUEST=$( curl -s "https://workbook.magnetix.dk/api/json/reply/TimeEntryUpdateRequest" \
         -H "Accept: application/json, text/plain, */*" \
         -H "Content-Type: application/json" \
         -H "Cookie: ${COOKIE}" \
@@ -451,14 +446,14 @@ function harvest(){
         HARVEST_TASKS_LENGTH=$( echo $HARVEST_TASK_NAMES | jq length )
 
         #ESTABLISH AUTHENTICATION TO WORKBOOK
-        AUTH_WITHOUT_HEADERS=$(curl -s "https://wbapp.magnetix.dk/api/auth/ldap" \
+        AUTH_WITHOUT_HEADERS=$(curl -s "https://workbook.magnetix.dk/api/auth/ldap" \
             -H "Content-Type: application/json" \
             -X "POST" \
             -d '{"UserName":"'"$WORKBOOK_USERNAME"'","Password":"'"$WORKBOOK_PASSWORD"'", "RememberMe": true}')
 
         WORKBOOK_USER_ID=$(echo $AUTH_WITHOUT_HEADERS | tr '\r\n' ' ' |  jq '.Id' )
 
-        AUTH_WITH_HEADERS=$(curl -i -s "https://wbapp.magnetix.dk/api/auth/ldap" \
+        AUTH_WITH_HEADERS=$(curl -i -s "https://workbook.magnetix.dk/api/auth/ldap" \
             -H "Content-Type: application/json" \
             -X "POST" \
             -d '{"UserName":"'"$WORKBOOK_USERNAME"'","Password":"'"$WORKBOOK_PASSWORD"'", "RememberMe": true}')
@@ -485,7 +480,7 @@ function harvest(){
         echo "${blue}Establishing authentication to workbook..."
         COOKIE="X-UAId=; ss-opt=perm; ss-pid=${SS_PID}; ss-id=${SS_ID};"
 
-        FILTER_RESPONSE=$( curl -s "https://wbapp.magnetix.dk/api/schedule/weekly/visualization/data?ResourceIds=${WORKBOOK_USER_ID}&PeriodType=1&Date=${DATE}&Interval=1" \
+        FILTER_RESPONSE=$( curl -s "https://workbook.magnetix.dk/api/schedule/weekly/visualization/data?ResourceIds=${WORKBOOK_USER_ID}&PeriodType=1&Date=${DATE}&Interval=1" \
             -H "Accept: application/json, text/plain, */*" \
             -H "Content-Type: application/json" \
             -H "Cookie: ${COOKIE}" \
@@ -566,6 +561,10 @@ function harvest(){
     else
         if git rev-parse --git-dir > /dev/null 2>&1; then
             REPO=$(basename `git rev-parse --show-toplevel`)
+
+            if [ "$REPO" = "Atlas" ] || [ "$REPO" = "Olympus" ]; then
+                REPO="Telia"
+            fi
             if [ "$1" = "" ]; then
                 currentBranch=$(git rev-parse --symbolic-full-name --abbrev-ref HEAD)
                 if [ "$currentBranch" = "" ]; then
