@@ -42,7 +42,7 @@ function register () {
         COUNTER=0
         while [  $COUNTER -lt $NUM_OF_ENTRIES ]; do
             CURRENT_HOURS=$( echo $TODAY_STATS | jq  " .[${COUNTER}] | .hours" )
-            HOURS=$(echo "$HOURS + $CURRENT_HOURS" | bc )
+            HOURS=$( jq -n "$HOURS + $CURRENT_HOURS" )
 
             let COUNTER=COUNTER+1
         done
@@ -57,7 +57,7 @@ function register () {
             -H "Content-Type: application/json" \
             -H "Cookie: ${COOKIE}" \
             -X "POST" \
-            -d '{"ResourceId":'$WORKBOOK_USER_ID',"TaskId":'$WORKBOOK_TASK_ID',"Hours":'$HOURS',"Description":"'"$DESCRIPTION"'","InternalDescription":"'"$DESCRIPTION"'","Date":'$DATE'T00:00:00.000Z}' )
+            -d '{"ResourceId":'$WORKBOOK_USER_ID',"TaskId":'$WORKBOOK_TASK_ID',"Hours":'$HOURS',"Description":"'"$DESCRIPTION"'","Date":'$DATE'T00:00:00.000Z}' )
 
     else
         echo "${red}No Match. ${blue}Couldn't find a match between task: ${REPO} and your booking(s) for the given date. "
@@ -240,7 +240,7 @@ function harvest(){
         ALL_TIME_ENTRIES=$(curl -s "https://api.harvestapp.com/v2/time_entries?from=$DATE&to=$DATE" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Harvest-Account-Id: $ACCOUNT_ID" )
-        TODAY_STATS=$(echo $ALL_TIME_ENTRIES | tr '\r\n' ' ' | jq -j '.time_entries | .[] | .task.name, "\n", .notes, " ", .hours, "\n\n"')
+        TODAY_STATS=$(echo $ALL_TIME_ENTRIES | tr '\r\n' ' ' | jq -j '.time_entries | .[] | .notes, " ", .hours, "\n"')
         echo "$TODAY_STATS";
 
     elif [ "$1" = "internal" ] || [ "$1" = "int" ]; then
@@ -296,7 +296,8 @@ function harvest(){
             echo "${red}You must pass amount of hours in format: ${blue}2:30"
         fi
         if git rev-parse --git-dir > /dev/null 2>&1; then
-            REPO=$(basename `git rev-parse --show-toplevel`)
+            # REPO=$(basename `git rev-parse --show-toplevel`)
+            REPO="Telia"
             currentBranch=$(git rev-parse --symbolic-full-name --abbrev-ref HEAD)
             if [ "$currentBranch" = "" ]; then
                 printf "${red}Couldn't get branchname.\n";
@@ -306,7 +307,7 @@ function harvest(){
                     task=${match[1]}
                     COMMIT_MESSAGE="${task}"
 
-                elif [[ $currentBranch =~ /(.*) ]]; then
+                elif [[ $currentBranch =~ /([:digit:].*$) ]]; then
                     task=${BASH_REMATCH[1]}
                     COMMIT_MESSAGE="${task}"
                 else
@@ -352,7 +353,6 @@ function harvest(){
                 -H "Harvest-Account-Id: ${ACCOUNT_ID}" )
 
             CURRENT_TIME_ENTRY_ID=$(echo $CURRENT_TIME_ENTRY | jq '.time_entries | .[] | .id')
-
             UPDATED_TIME_ENTRY=$(curl -s "https://api.harvestapp.com/v2/time_entries/${CURRENT_TIME_ENTRY_ID}" \
                 -H "Authorization: Bearer $ACCESS_TOKEN" \
                 -H "Harvest-Account-Id: $ACCOUNT_ID" \
@@ -373,7 +373,7 @@ function harvest(){
                     task=${match[1]}
                     COMMIT_MESSAGE="${task}"
 
-                elif [[ $currentBranch =~ /(.*) ]]; then
+                elif [[ $currentBranch =~ /([:digit:].*$) ]]; then
                     task=${BASH_REMATCH[1]}
                     COMMIT_MESSAGE="${task}"
                 else
@@ -570,11 +570,11 @@ function harvest(){
                 if [ "$currentBranch" = "" ]; then
                     printf "${red}Couldn't get branchname.\n";
                 else
+
                     if [[ $currentBranch =~ '/(.*)' ]]; then
                         task=${match[1]}
                         COMMIT_MESSAGE="${task}"
-
-                    elif [[ $currentBranch =~ /(.*) ]]; then
+                    elif [[ $currentBranch =~ /([:digit:].*$) ]]; then
                         task=${BASH_REMATCH[1]}
                         COMMIT_MESSAGE="${task}"
                     else
