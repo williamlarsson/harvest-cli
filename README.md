@@ -1,25 +1,32 @@
 # Harvest Command Line Interface
 *"Work first, harvest after" - Ada Lungu, developer and philanthropist*
 
-### Install jq (json parser for bash)
+### 1 Install jq (json parser for bash)
 Mac: `brew install jq`
 
 Win: `chocolatey install jq`
 
-### Setup Harvest app and update config.sh
-- Duplicate config.example and rename to config.sh
-- Update config.sh with the following variables
+*buntu: `apt install jq`
+
+### 2 Create account
+
 - [Create harvest account](https://www.getharvest.com/signup)
-- Client: **Isobar** Project: **Coding**
-- Visit profile page, get the user id from the url, and update the ```USER_ID``` variable
-- Visit projects page -> your project, get the project ID from the url, and update the ``PROJECT`` variable
-- Visit [developers page] (https://id.getharvest.com/developers), generate an Access token, and update the ```ACCESS_TOKEN``` & ``` ACCOUNT_ID ``` variables
+- (e.g. Client: **Isobar** Project: **Coding**)
+
+### 3 Setup Harvest app and update config.sh
+- Clone this repository (`git clone
+  https://github.com/williamlarsson/harvest-cli /path/to/harvest-cli`)
+- Duplicate `config.example` and rename to `config.sh`
+- Update `config.sh` with the following variables
+  - Visit profile page, get the user id from the url, and update the ```USER_ID``` variable
+  - Visit projects page -> your project, get the project ID from the url, and update the ``PROJECT`` variable
+  - Visit [developers page] (https://id.getharvest.com/developers), generate an Access token, and update the ```ACCESS_TOKEN``` & ``` ACCOUNT_ID ``` variables
 - Finally, add these two lines to your .zshrc, .bash_profile or .bashrc file, and open a new terminal window:
 
         source /path/to/harvest-cli/config.sh
         source /path/to/harvest-cli/harvest-cli.sh
 
-### Setup complete
+### 4 Setup complete
 
 ## Usage
 >Note: that any branches with no slash will generate a time entry with an empty message, so if you're on eg. develop, master, use the `hv <message>` command
